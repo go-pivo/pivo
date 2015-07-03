@@ -9,27 +9,30 @@ import (
 	"os/signal"
 	"time"
 
-	"gopkg.in/pivo.v1/ws"
+	"gopkg.in/pivo.v2/ws"
 )
 
 var (
-	host  = flag.String("h", "localhost", "echo hub host")
-	port  = flag.String("p", "8000", "echo hub port")
+	host  = flag.String("h", "localhost", "chat server host")
+	port  = flag.String("p", "8000", "chat server port")
 )
 
 type reader struct {}
 
 func (r *reader) OnClose(err error) error {
-	return nil
-}
-
-func (r *reader) OnReadBinary(buf []byte) error {
-	return nil
-}
-
-func (r *reader) OnReadText(buf []byte) error {
 	fmt.Println()
-	fmt.Println(string(buf))
+	fmt.Println("Connection to server has terminated")
+	os.Exit(0)
+	return nil
+}
+
+func (r *reader) OnBinaryRead(buf []byte) error {
+	return nil
+}
+
+func (r *reader) OnTextRead(text string) error {
+	fmt.Println()
+	fmt.Println(text)
 	fmt.Print("> ")
 	return nil
 }
@@ -40,11 +43,13 @@ func shutdown(c *ws.Conn) {
 	os.Exit(0)
 }
 
-func waitForUserInput(port chan []byte) {
+func waitForUserInput(conn *ws.Conn) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		text, _ := reader.ReadString('\n')
-		port <-[]byte(text)[:len(text)-1]
+		// Remove trailing newline
+		msg := []byte(text)[:len(text)-1]
+		conn.Send(conn.TextMessage(string(msg)))
 	}
 }
 
@@ -53,7 +58,7 @@ func main() {
 	fmt.Println("Hit CTRL-C to exit.")
 	fmt.Println()
 	flag.Parse()
-	conn := ws.NewConn()
+	conn := ws.DefaultConn()
 	remote := fmt.Sprintf("ws://%s:%s/", *host, *port)
 	for {
 		sigint := make(chan os.Signal)
@@ -62,14 +67,9 @@ func main() {
 			log.Print(err)
 		} else {
 			go func() { <-sigint; shutdown(conn) }()
-			port := conn.Sender()
-			go func() {
-				err := conn.Receiver(&reader{})
-				if err != nil {
-					log.Print(err)
-				}
-			}()
-			waitForUserInput(port)
+			go conn.Receiver(&reader{})
+			go conn.Sender()
+			waitForUserInput(conn)
 		}
 		signal.Stop(sigint)
 		time.Sleep(time.Second * 5)
