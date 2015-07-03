@@ -11,7 +11,7 @@ import (
 )
 
 // The Pivo package version numbers
-const Version = "2.0.0"
+const Version = "2.0.1"
 
 // Default value for the join rate limit.
 // Currently defined as a maximum of 64 per seconds.
